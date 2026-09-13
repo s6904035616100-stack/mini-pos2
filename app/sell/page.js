@@ -135,7 +135,11 @@ export default function SellPage() {
                 ))}
               </select>
 
-              <input
+<input
   type="number"
   placeholder="จำนวน"
   min="1"
+  value={quantity}
+  onChange={(e) => setQuantity(e.target.value)}
+  required
+/>
