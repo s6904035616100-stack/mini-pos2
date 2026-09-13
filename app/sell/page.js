@@ -131,15 +131,3 @@ export default function SellPage() {
                   <option key={product.id} value={product.id}>
                     {product.name} - ฿{product.price} (คงเหลือ {product.stock}{" "}
                     {product.unit})
-                  </option>
-                ))}
-              </select>
-
-<input
-  type="number"
-  placeholder="จำนวน"
-  min="1"
-  value={quantity}
-  onChange={(e) => setQuantity(e.target.value)}
-  required
-/>
