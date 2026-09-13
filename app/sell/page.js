@@ -136,6 +136,6 @@ export default function SellPage() {
               </select>
 
               <input
-                type="number"
-                placeholder="จำนวน"
-                min="1"
+  type="number"
+  placeholder="จำนวน"
+  min="1"
