@@ -3,37 +3,23 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
-// ===== Telegram Config =====
-const TELEGRAM_BOT_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID;
 const LOW_STOCK_THRESHOLD = 5; // เกณฑ์เตือนสต๊อกใกล้หมด
 
-// ฟังก์ชันกลางสำหรับส่งข้อความเข้า Telegram
-// หุ้ม try/catch ไว้ทั้งหมด ถ้า API ล้มเหลวจะไม่กระทบระบบขาย
+// ส่งข้อความแจ้งเตือนผ่าน API Route ของเราเอง (ไม่ยิง Telegram ตรงๆ)
+// Bot Token จะถูกเก็บไว้ฝั่ง server เท่านั้น ปลอดภัยกว่า
 async function sendTelegramMessage(messageText) {
-  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-    console.warn("ยังไม่ได้ตั้งค่า Telegram config ข้ามการแจ้งเตือน");
-    return;
-  }
-
   try {
-    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-    const res = await fetch(url, {
+    const res = await fetch("/api/telegram", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: messageText,
-        parse_mode: "HTML",
-      }),
+      body: JSON.stringify({ text: messageText }),
     });
 
     if (!res.ok) {
-      const detail = await res.text();
+      const detail = await res.json();
       console.error("ส่ง Telegram ไม่สำเร็จ:", detail);
     }
   } catch (err) {
-    // กลืน error ไว้ตรงนี้ ไม่ให้หลุดไปกระทบ flow การขาย
     console.error("เกิดข้อผิดพลาดตอนส่ง Telegram:", err);
   }
 }
@@ -159,7 +145,6 @@ export default function SellPage() {
     }
 
     // ===== ตัดสต๊อกสำเร็จแล้ว: ส่งแจ้งเตือนเข้า Telegram =====
-    // ใช้ await ได้เพราะ sendTelegramMessage จัดการ error ไว้ภายในแล้ว
     // ถ้าส่งไม่สำเร็จ ระบบขายยังทำงานต่อได้ตามปกติ
     await sendTelegramMessage(
       buildNewOrderMessage({
