@@ -3,6 +3,68 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabaseClient";
 
+// ===== Telegram Config =====
+const TELEGRAM_BOT_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.NEXT_PUBLIC_TELEGRAM_CHAT_ID;
+const LOW_STOCK_THRESHOLD = 5; // เกณฑ์เตือนสต๊อกใกล้หมด
+
+// ฟังก์ชันกลางสำหรับส่งข้อความเข้า Telegram
+// หุ้ม try/catch ไว้ทั้งหมด ถ้า API ล้มเหลวจะไม่กระทบระบบขาย
+async function sendTelegramMessage(messageText) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.warn("ยังไม่ได้ตั้งค่า Telegram config ข้ามการแจ้งเตือน");
+    return;
+  }
+
+  try {
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        text: messageText,
+        parse_mode: "HTML",
+      }),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text();
+      console.error("ส่ง Telegram ไม่สำเร็จ:", detail);
+    }
+  } catch (err) {
+    // กลืน error ไว้ตรงนี้ ไม่ให้หลุดไปกระทบ flow การขาย
+    console.error("เกิดข้อผิดพลาดตอนส่ง Telegram:", err);
+  }
+}
+
+// ข้อความแจ้งเตือนรายการขายใหม่
+function buildNewOrderMessage({ name, quantity, totalPrice, stockLeft, unit }) {
+  const time = new Date().toLocaleString("th-TH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
+  return [
+    "🛍️ <b>มีรายการขายใหม่!</b>",
+    `- สินค้า: ${name}`,
+    `- จำนวน: ${quantity} ${unit}`,
+    `- ราคารวม: ${totalPrice} บาท`,
+    `- สต๊อกคงเหลือปัจจุบัน: ${stockLeft} ${unit}`,
+    `- เวลา: ${time}`,
+  ].join("\n");
+}
+
+// ข้อความเตือนภัยสต๊อกใกล้หมด
+function buildLowStockMessage({ name, stockLeft, unit }) {
+  return [
+    "🚨 <b>[เตือนภัย] สต๊อกสินค้าใกล้หมด!</b>",
+    `- สินค้า: ${name}`,
+    `- คงเหลือเพียง: ${stockLeft} ${unit}`,
+    "⚠️ กรุณาเติมสต๊อกสินค้าด่วน!",
+  ].join("\n");
+}
+
 export default function SellPage() {
   // รายการสินค้าทั้งหมด (สำหรับ dropdown)
   const [products, setProducts] = useState([]);
@@ -94,6 +156,30 @@ export default function SellPage() {
       setError(updateError.message);
       setSubmitting(false);
       return;
+    }
+
+    // ===== ตัดสต๊อกสำเร็จแล้ว: ส่งแจ้งเตือนเข้า Telegram =====
+    // ใช้ await ได้เพราะ sendTelegramMessage จัดการ error ไว้ภายในแล้ว
+    // ถ้าส่งไม่สำเร็จ ระบบขายยังทำงานต่อได้ตามปกติ
+    await sendTelegramMessage(
+      buildNewOrderMessage({
+        name: selectedProduct.name,
+        quantity: parsedQuantity,
+        totalPrice: totalPrice,
+        stockLeft: newStock,
+        unit: selectedProduct.unit,
+      })
+    );
+
+    // ถ้าสต๊อกหลังตัดเหลือน้อยกว่าหรือเท่ากับเกณฑ์ ให้ยิงเตือนภัยอีก 1 ข้อความ
+    if (newStock <= LOW_STOCK_THRESHOLD) {
+      await sendTelegramMessage(
+        buildLowStockMessage({
+          name: selectedProduct.name,
+          stockLeft: newStock,
+          unit: selectedProduct.unit,
+        })
+      );
     }
 
     // สำเร็จ: แจ้งเตือน รีเซ็ตฟอร์ม และโหลดข้อมูลสินค้าใหม่
